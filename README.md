@@ -6,6 +6,9 @@ summaries, optional tracked-object trajectories, reference-mask comparisons,
 overlays, and a hash-bound receipt. Acquisitions awaiting annotation remain
 explicit; the package does not determine organoid health.
 
+See the [development roadmap](ROADMAP.md) for annotation correctness, frozen
+human review, instance agreement and the first reproducible real-image case.
+
 ## Why this is separate
 
 The existing `brightfield-colony-qc` package extracts hand-built features from
