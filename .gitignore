@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+artifacts/
+*.tif
+*.tiff
+*.png
+*.jpg
+*.jpeg
+*.h5ad
+*.zip
+
+
+*.egg-info/
