@@ -322,6 +322,14 @@ def _cross_sectional_summary(frame_rows: list[dict], object_rows: list[dict]) ->
     return result
 
 
+def _reported_scale_signature(signature) -> bool:
+    unknown = {"", "na", "n/a", "not reported", "not-reported", "unknown", "none", "null"}
+    return signature is not None and all(
+        re.sub(r"[\s_]+", " ", str(value or "").strip()).casefold() not in unknown
+        for value in signature
+    )
+
+
 def _tracked_object_growth(track_rows: list[dict], object_rows: list[dict]) -> list[dict]:
     object_lookup = {(row["frame_id"], row["instance_label_value"]): row for row in object_rows}
     trajectories: dict[tuple[str, str], list[dict]] = defaultdict(list)
@@ -350,7 +358,8 @@ def _tracked_object_growth(track_rows: list[dict], object_rows: list[dict]) -> l
             signature = next(iter(signatures)) if len(signatures) == 1 else None
             if prior and area_um2 is not None and prior["area_um2"] is not None and prior["area_um2"] > 0:
                 growth, basis = 100 * (area_um2 / prior["area_um2"] - 1), "calibrated_area_um2"
-            elif (prior and area_um2 is None and signature is not None and signature == prior["signature"]
+            elif (prior and area_um2 is None and prior["area_um2"] is None
+                  and _reported_scale_signature(signature) and signature == prior["signature"]
                   and prior["area_pixels"] > 0):
                 growth, basis = 100 * (area_pixels / prior["area_pixels"] - 1), "same_microscope_and_magnification_pixel_area"
             else:

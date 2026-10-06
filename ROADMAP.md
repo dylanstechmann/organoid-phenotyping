@@ -21,22 +21,31 @@ publication is a separate outstanding task.
 
 ## O1 — Make annotation task state reliable
 
-**First blocker before serious labeling.** Task selection is asynchronous:
-older image/annotation requests can finish after a newer selection. Pin each
-request, rendered image and save to the same task generation/identity.
+**Task-switch protection is implemented locally.** Every selection now has a
+generation identity, so a delayed image or saved-mask response cannot replace
+the current task. Controls pause during loads/saves, saves use a frozen task and
+contour snapshot, and navigation asks before dropping unsaved edits.
 
-- Cancel/ignore stale loads; reject saves until the selected image and contours
-  are ready; preserve edits when navigation is interrupted.
-- Add original-resolution zoom/pan or tiles and coordinate round-trip checks.
-  Current previews shrink images to at most 1600 × 1600 while masks use
-  original dimensions; a preview is not full-resolution boundary review.
-- Add vertex/instance editing, contrast, labels, undo and an unsaved edit guard.
+- Remaining: add original-resolution tiles or pyramid display. The endpoint
+  downsamples previews to at most 1600 × 1600. The new display-scale control
+  enlarges that preview; it does not add image detail. Polygon coordinates
+  remain normalized against preview dimensions and are rasterized on the
+  source-image mask, so original registration stays intact.
+- A Node UI harness now delays image/mask responses and checks stale-task
+  rejection, cancelled edits, frozen save targets and zoom behavior. Add a
+  real browser integration test when this package has a browser test runtime.
+- Add original-resolution coordinate round-trip checks when full-resolution
+  tiles arrive.
+- Add vertex dragging, contrast controls and clearer instance IDs. Vertex
+  placement, whole-polygon removal, undo and the unsaved-edit guard are present.
 - Support no-visible-target, ambiguous, occluded, cropped and unusable task
   dispositions with rationale. Requiring a polygon for every image biases
   intake toward visible/successful objects.
 
-**Acceptance:** out-of-order loads cannot save contours to the wrong task;
-coordinates survive reload; edits are guarded; empty/excluded tasks stay counted.
+**Acceptance:** late loads cannot replace another task; a cancelled edit remains
+visible; attempted navigation during save is blocked; zoom never claims detail
+above the downloaded pixels; full-resolution tiles preserve mask coordinates;
+empty/excluded tasks stay counted.
 
 ## O2 — Freeze masks and implement review/adjudication
 
@@ -90,11 +99,14 @@ tables expose group counts, missingness and each interval's independent unit.
 
 ## O5 — Harden geometry and tracking semantics
 
-- Suppress pixel-area growth when acquisition scale signatures are only
-  `not_reported`. Unknown microscope/magnification does not establish comparable
-  scale; require verified same scale or compatible calibrated units.
-- Reject mixed calibrated/uncalibrated comparisons and incompatible units;
-  retain gaps rather than interpolate failed frames.
+The current correction suppresses pixel-area growth when scale signatures are
+unknown and disallows pixel comparison across calibrated/uncalibrated
+transitions.
+
+- Continue to verify scale metadata provenance; a reported microscope name and
+  magnification alone cannot establish calibration or same optical settings.
+- Reject incompatible physical units and retain gaps rather than interpolate
+  failed frames.
 - Define polygon overlap rules; review current last-polygon-wins behavior.
   Check self-intersections, degenerate contours, disconnected/negative labels
   and empty foreground where appropriate.

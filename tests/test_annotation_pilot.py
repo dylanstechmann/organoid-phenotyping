@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -14,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from organoidphenotyping.annotation_pilot import prepare_annotation_pilot
-from organoidphenotyping.annotation_workbench import audit_annotations, create_session, save_annotation
+from organoidphenotyping.annotation_workbench import INDEX_HTML, audit_annotations, create_session, save_annotation
 from organoidphenotyping.core import StudyError, measure_study
 
 
@@ -24,6 +26,7 @@ class AnnotationPilotTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         (self.root / "images").mkdir()
+
         rows = []
         for group, culture, treatments in [
             ("kidney_a", "Domes", ["DMSO", "Forskolin", "Media"]),
@@ -76,6 +79,20 @@ class AnnotationPilotTests(unittest.TestCase):
                 "final_test_group_ids": ["kidney_test"],
             },
         }), encoding="utf-8")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is optional for the embedded annotation desk check")
+    def test_annotation_desk_ignores_late_task_responses_and_freezes_save_target(self):
+        javascript = INDEX_HTML.split("<script>", 1)[1].split("</script>", 1)[0] + "\n({state,selectTask})"
+        with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as handle:
+            handle.write(javascript)
+            script_path = Path(handle.name)
+        self.addCleanup(script_path.unlink, missing_ok=True)
+        result = subprocess.run(
+            [shutil.which("node"), str(ROOT / "tests" / "annotation_workbench_ui_harness.cjs"), str(script_path)],
+            check=False, capture_output=True, text=True, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("UI stale-load", result.stdout)
 
     @staticmethod
     def _read_csv(path):

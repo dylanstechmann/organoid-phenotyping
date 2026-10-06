@@ -8,6 +8,10 @@ explicit; the package does not determine organoid health.
 
 See the [development roadmap](ROADMAP.md) for annotation correctness, frozen
 human review, instance agreement and the first reproducible real-image case.
+The local annotation desk now guards task switches during slow loads and saves,
+prompts before discarding edited contours, and has a fit/zoom control. It keeps
+the server's 1600-pixel overview preview; zoom enlarges that preview, while mask
+coordinates continue to map to the source image.
 
 ## Why this is separate
 
@@ -99,6 +103,10 @@ study folder. It does not copy source images or overlays, infer cyst identity,
 or mark the biological assay as measured.
 
 ## Manual annotation pilot
+
+Run the package suite with `python -m unittest discover -s tests -v`. When
+Node.js is available, this also exercises delayed task/image responses and
+save-target handling in the embedded annotation desk.
 
 `prepare-annotation-pilot` creates a 24-hour worklist with one deterministically
 selected image per available development source-kidney × culture × treatment

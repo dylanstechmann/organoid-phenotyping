@@ -18,6 +18,34 @@ from organoidphenotyping.core import StudyError, _mask_measurement, _mask_object
 
 
 class PhenotypingTests(unittest.TestCase):
+    def test_pixel_area_growth_requires_reported_matching_scale_and_calibration_state(self):
+        def record(frame, time, area, microscope, magnification, area_um2=None):
+            return {"frame_id": frame, "instance_label_value": 1, "track_id": "track-1",
+                    "specimen_id": "specimen-1", "biological_unit_id": "kidney-1",
+                    "culture_condition": "dome", "treatment": "vehicle", "timepoint_h": time,
+                    "area_pixels": area, "area_um2": area_um2, "microscope_id": microscope,
+                    "magnification": magnification}
+
+        def trajectory(first, second):
+            rows = [first, second]
+            return _tracked_object_growth(
+                [{"frame_id": row["frame_id"], "instance_label_value": 1, "track_id": "track-1"}
+                 for row in rows], rows)
+
+        unknown = trajectory(record("unknown-0", 0, 4, "not_reported", "not reported"),
+                             record("unknown-1", 12, 16, "not_reported", "not reported"))
+        self.assertIsNone(unknown[1]["growth_percent_since_prior_tracked_timepoint"])
+        self.assertEqual(unknown[1]["growth_basis"], "not_comparable_without_shared_scale")
+
+        reported = trajectory(record("known-0", 0, 4, "scope-A", "5x"),
+                              record("known-1", 12, 16, "scope-A", "5x"))
+        self.assertEqual(reported[1]["growth_percent_since_prior_tracked_timepoint"], 300.0)
+        self.assertEqual(reported[1]["growth_basis"], "same_microscope_and_magnification_pixel_area")
+
+        mixed = trajectory(record("mixed-0", 0, 4, "scope-A", "5x", 1.0),
+                           record("mixed-1", 12, 16, "scope-A", "5x"))
+        self.assertIsNone(mixed[1]["growth_percent_since_prior_tracked_timepoint"])
+
     def test_labeled_mask_reports_union_and_per_object_geometry_with_optional_scale(self):
         labels = np.array([
             [0, 1, 1, 0, 0],
