@@ -19,9 +19,10 @@ class Element {
   getBoundingClientRect() { return {left: 0, top: 0, width: 400, height: 300}; }
 }
 for (const id of ['#task','#image','#status','#annotator','#target','#image-size','#progress',
-  '#finish','#undo','#remove-object','#clear','#save','#next','#previous','#tasks']) elements.set(id,new Element(id));
+  '#finish','#undo','#remove-object','#clear','#save','#disposition','#disposition-rationale',
+  '#save-disposition','#next','#previous','#tasks']) elements.set(id,new Element(id));
 const tasks = ['a','b'].map(task_id => ({task_id,annotation_target:'outer boundary',width:1200,height:900,has_mask:true}));
-const images = {}, annotations = {}, context = {Promise,Math,JSON,encodeURIComponent,console,
+const images = {}, annotations = {}, dispositions = {}, context = {Promise,Math,JSON,encodeURIComponent,console,
   document:{querySelector:s=>elements.get(s),createElement:()=>new Element()},
   localStorage:{getItem:()=>'',setItem(){}},window:{innerWidth:800,innerHeight:700,confirm:()=>false},
   Image:class { set src(url) { this.id=decodeURIComponent(url.split('/').pop()); }
@@ -31,8 +32,12 @@ const images = {}, annotations = {}, context = {Promise,Math,JSON,encodeURICompo
     if(url==='/api/session') return Promise.resolve({json:async()=>({tasks})});
     if(url==='/api/annotation') { context.savedPayload=JSON.parse(options.body);
       return new Promise(resolve=>{context.finishSave=()=>resolve({ok:true,json:async()=>({revision:2})})}); }
+    if(url==='/api/disposition') { context.dispositionPayload=JSON.parse(options.body);
+      return new Promise(resolve=>{context.finishDisposition=()=>resolve({ok:true,json:async()=>({revision:3})})}); }
     const id=decodeURIComponent(url.split('/').pop());
-    return new Promise(resolve=>{annotations[id]=resolve});
+    if(url.startsWith('/api/annotation/')) return new Promise(resolve=>{annotations[id]=resolve});
+    if(url.startsWith('/api/disposition/')) return new Promise(resolve=>{dispositions[id]=resolve});
+    throw new Error(`Unexpected fetch URL: ${url}`);
   }};
 const canvas=elements.get('#image');
 canvas.addEventListener=Element.prototype.addEventListener;
@@ -42,10 +47,12 @@ const api=vm.runInNewContext(fs.readFileSync(process.argv[2],'utf8'),context);
 const tick=async()=>{for(let i=0;i<12;i++) await Promise.resolve()};
 (async()=>{
   await tick(); assert.ok(images.a,'initial image request started');
-  images.a(); await tick(); assert.ok(annotations.a,'initial saved-mask request started');
-  const selectingB=api.selectTask('b'); images.b(); await tick(); assert.ok(annotations.b,'second saved-mask request started');
+  images.a(); await tick(); assert.ok(annotations.a,'initial saved-mask request started');assert.ok(dispositions.a,'initial task-disposition request started');
+  const selectingB=api.selectTask('b'); images.b(); await tick(); assert.ok(annotations.b,'second saved-mask request started');assert.ok(dispositions.b,'second task-disposition request started');
   annotations.b({ok:true,status:200,json:async()=>({polygons:[[[0.1,0.1],[0.7,0.1],[0.7,0.7]]]})});
+  dispositions.b({ok:false,status:404,json:async()=>({})});
   await selectingB; annotations.a({ok:true,status:200,json:async()=>({polygons:[[[0.2,0.2],[0.9,0.2],[0.9,0.9]]]})});
+  dispositions.a({ok:false,status:404,json:async()=>({})});
   await tick(); assert.equal(api.state.current,'b'); assert.equal(api.state.preview.id,'b');
   assert.equal(api.state.polygons[0][0][0],0.1,'late response cannot replace task B masks');
   const panel=canvas.parentNode.parentNode,zoom=panel.children[0].children.find(item=>item.type==='range');
@@ -59,6 +66,16 @@ const tick=async()=>{for(let i=0;i<12;i++) await Promise.resolve()};
   const saving=elements.get('#save').listeners.click(); await tick();
   assert.equal(api.state.saving,true); assert.equal(await api.selectTask('a'),false);
   context.finishSave(); await saving; assert.equal(context.savedPayload.task_id,'b');
+  elements.get('#disposition').value='ambiguous';elements.get('#disposition').listeners.change();
+  elements.get('#disposition-rationale').value='The requested edge is not distinguishable.';
+  elements.get('#disposition-rationale').listeners.input();
+  const savingDisposition=elements.get('#save-disposition').listeners.click();await tick();
+  assert.equal(api.state.saving,true);assert.equal(context.dispositionPayload.task_id,'b');
+  assert.equal(context.dispositionPayload.disposition,'ambiguous');
+  context.finishDisposition();await savingDisposition;
+  assert.equal(api.state.savedDisposition.disposition,'ambiguous');
+  assert.equal(api.state.polygons.length,0,'a disposition replaces the current mask outcome without deleting its revision');
+  assert.equal(api.state.dispositionDirty,false);
   assert.equal(canvas.style.maxWidth,'none'); assert.equal(typeof elements.get('#image').getContext,'function');
-  console.log('annotation UI stale-load, save-target, dirty-edit and zoom checks passed');
+  console.log('annotation UI stale-load, save-target, disposition, dirty-edit and zoom checks passed');
 })().catch(error=>{console.error(error);process.exitCode=1});

@@ -26,21 +26,32 @@ generation identity, so a delayed image or saved-mask response cannot replace
 the current task. Controls pause during loads/saves, saves use a frozen task and
 contour snapshot, and navigation asks before dropping unsaved edits.
 
+**Reasoned non-mask dispositions are implemented locally.** Annotators can
+record no visible target, ambiguous boundary, occluded, cropped or unusable
+outcomes with a rationale. Each disposition is an immutable revision tied to
+the source-image hash and reviewer; a later mask can supersede it without
+deleting the disposition record. Audits count a disposition as task completion
+without calling it a mask, and they report disposition agreement separately
+from foreground Dice. The exported manifest keeps the row pending, carries the
+relative disposition record path and hash, and the measurement command verifies
+both the hash and fields before reporting it.
+
 - Remaining: add original-resolution tiles or pyramid display. The endpoint
   downsamples previews to at most 1600 × 1600. The new display-scale control
   enlarges that preview; it does not add image detail. Polygon coordinates
   remain normalized against preview dimensions and are rasterized on the
   source-image mask, so original registration stays intact.
 - A Node UI harness now delays image/mask responses and checks stale-task
-  rejection, cancelled edits, frozen save targets and zoom behavior. Add a
-  real browser integration test when this package has a browser test runtime.
+  rejection, cancelled edits, frozen save targets, dispositions and zoom
+  behavior. Add a real browser integration test when this package has a browser
+  test runtime.
 - Add original-resolution coordinate round-trip checks when full-resolution
   tiles arrive.
 - Add vertex dragging, contrast controls and clearer instance IDs. Vertex
   placement, whole-polygon removal, undo and the unsaved-edit guard are present.
-- Support no-visible-target, ambiguous, occluded, cropped and unusable task
-  dispositions with rationale. Requiring a polygon for every image biases
-  intake toward visible/successful objects.
+- Add explicit disposition-level unresolved and excluded counts to the
+  ResearchDesk review card; pending-disposition rows stay outside every
+  measured-mask count.
 
 **Acceptance:** late loads cannot replace another task; a cancelled edit remains
 visible; attempted navigation during save is blocked; zoom never claims detail

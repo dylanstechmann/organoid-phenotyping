@@ -34,7 +34,15 @@ OPTIONAL_COLUMNS = {
     "passage", "culture_day", "source_passage_day_token",
     "post_condition_passage_day_token", "magnification", "annotation_task_id",
     "mask_annotator_id", "mask_annotator_role", "annotation_protocol_version",
+    "annotation_disposition", "annotation_disposition_rationale",
+    "annotation_disposition_annotator_id", "annotation_disposition_task_id",
+    "annotation_disposition_revision",
+    "annotation_disposition_path", "expected_annotation_disposition_sha256",
 }
+ANNOTATION_DISPOSITION_CODES = {
+    "no_visible_target", "ambiguous", "occluded", "cropped", "unusable",
+}
+ANNOTATION_DISPOSITION_RATIONALE_MAX_CHARS = 500
 UNKNOWN = "not_reported"
 MAX_IMAGE_BYTES = 200_000_000
 MAX_IMAGE_PIXELS = 100_000_000
@@ -470,6 +478,13 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "mask_annotator_id": row.get("mask_annotator_id", ""),
             "mask_annotator_role": row.get("mask_annotator_role", ""),
             "annotation_protocol_version": row.get("annotation_protocol_version", ""),
+            "annotation_disposition": row.get("annotation_disposition", ""),
+            "annotation_disposition_rationale": row.get("annotation_disposition_rationale", ""),
+            "annotation_disposition_annotator_id": row.get("annotation_disposition_annotator_id", ""),
+            "annotation_disposition_task_id": row.get("annotation_disposition_task_id", ""),
+            "annotation_disposition_revision": row.get("annotation_disposition_revision", ""),
+            "annotation_disposition_path": row.get("annotation_disposition_path", ""),
+            "expected_annotation_disposition_sha256": row.get("expected_annotation_disposition_sha256", ""),
             "quality_flags": "",
             "split": split_map.get(group_id, "unassigned"),
             "image_sha256": "", "mask_sha256": "", "foreground_label_value_count": None,
@@ -487,6 +502,52 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
                 raise StudyError(f"row {line}: non-measured frames cannot carry a measured segmentation mask")
             if any(row.get(field, "") for field in ("annotation_task_id", "mask_annotator_id", "mask_annotator_role", "annotation_protocol_version")):
                 raise StudyError(f"row {line}: non-measured frames cannot carry annotation provenance")
+            disposition_fields = (
+                "annotation_disposition", "annotation_disposition_rationale",
+                "annotation_disposition_annotator_id", "annotation_disposition_task_id",
+                "annotation_disposition_revision",
+                "annotation_disposition_path", "expected_annotation_disposition_sha256",
+            )
+            disposition_values = [row.get(field, "").strip() for field in disposition_fields]
+            if any(disposition_values):
+                if status != "pending_annotation" or not all(disposition_values):
+                    raise StudyError(f"row {line}: a task disposition requires a complete pending-annotation record")
+                code, rationale, annotator, task_id, revision, disposition_path_value, disposition_hash = disposition_values
+                if code not in ANNOTATION_DISPOSITION_CODES:
+                    raise StudyError(f"row {line}: unsupported annotation disposition")
+                if not 8 <= len(rationale) <= ANNOTATION_DISPOSITION_RATIONALE_MAX_CHARS:
+                    raise StudyError(f"row {line}: disposition rationale must contain 8–500 characters")
+                if not ID_RE.fullmatch(annotator) or not re.fullmatch(r"[0-9a-f]{16}", revision):
+                    raise StudyError(f"row {line}: disposition annotator or revision is malformed")
+                if not re.fullmatch(r"b-[0-9a-f]{16}", task_id):
+                    raise StudyError(f"row {line}: disposition task ID is malformed")
+                if not SHA256_RE.fullmatch(disposition_hash):
+                    raise StudyError(f"row {line}: disposition SHA-256 is malformed")
+                disposition_file = _resolve_file(root, disposition_path_value, "annotation_disposition_path")
+                disposition_raw = disposition_file.read_bytes()
+                if _sha256(disposition_raw) != disposition_hash.lower():
+                    raise StudyError(f"row {line}: annotation disposition SHA-256 does not match its record")
+                try:
+                    disposition_record = json.loads(disposition_raw.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise StudyError(f"row {line}: annotation disposition record is not valid UTF-8 JSON") from exc
+                record_rationale = disposition_record.get("rationale") if isinstance(disposition_record, dict) else None
+                if (not isinstance(disposition_record, dict)
+                        or disposition_record.get("disposition") != code
+                        or not isinstance(record_rationale, str) or record_rationale.strip() != rationale
+                        or disposition_record.get("annotator_id") != annotator
+                        or disposition_record.get("task_id") != task_id
+                        or disposition_record.get("revision") != revision):
+                    raise StudyError(f"row {line}: manifest disposition fields do not match the hashed record")
+                record.update({
+                    "annotation_disposition": code,
+                    "annotation_disposition_rationale": rationale,
+                    "annotation_disposition_annotator_id": annotator,
+                    "annotation_disposition_task_id": task_id,
+                    "annotation_disposition_revision": revision,
+                    "annotation_disposition_path": disposition_path_value,
+                    "expected_annotation_disposition_sha256": disposition_hash.lower(),
+                })
             if status == "pending_annotation" and not row["image_path"]:
                 raise StudyError(f"row {line}: pending_annotation frames require an image")
             if row["image_path"]:
@@ -494,6 +555,13 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
                 image_raw, _image = _load_image(image_path, "image", row.get("expected_image_sha256", ""))
                 record["image_sha256"] = _sha256(image_raw)
         else:
+            if any(row.get(field, "") for field in (
+                "annotation_disposition", "annotation_disposition_rationale",
+                "annotation_disposition_annotator_id", "annotation_disposition_task_id",
+                "annotation_disposition_revision",
+                "annotation_disposition_path", "expected_annotation_disposition_sha256",
+            )):
+                raise StudyError(f"row {line}: measured frames cannot also carry a task disposition")
             if not row["image_path"] or not row["mask_path"]:
                 raise StudyError(f"row {line}: measured frames require image_path and mask_path")
             annotation_values = [row.get(field, "").strip() for field in (
@@ -622,6 +690,11 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
         "n_missing_frames": sum(row["status"] == "missing" for row in frame_rows),
         "n_failed_frames": sum(row["status"] == "failed" for row in frame_rows),
         "n_pending_annotation_frames": sum(row["status"] == "pending_annotation" for row in frame_rows),
+        "n_annotation_disposition_frames": sum(bool(row["annotation_disposition"]) for row in frame_rows),
+        "annotation_disposition_counts": {
+            code: sum(row["annotation_disposition"] == code for row in frame_rows)
+            for code in sorted(ANNOTATION_DISPOSITION_CODES)
+        },
         "n_biological_units": len(all_groups),
         "object_tracking": {
             "status": "reviewed_track_map_supplied" if resolved_track_map is not None else "no_track_map",
@@ -651,6 +724,10 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "status_reason", "image_path", "mask_path", "source_uri", "license", "segmentation_method",
             "segmentation_version", "annotation_task_id", "mask_annotator_id", "mask_annotator_role",
             "annotation_protocol_version", "quality_flags", "split", "pixel_size_um", "foreground_label_value_count",
+            "annotation_disposition", "annotation_disposition_rationale",
+            "annotation_disposition_annotator_id", "annotation_disposition_task_id",
+            "annotation_disposition_revision",
+            "annotation_disposition_path", "expected_annotation_disposition_sha256",
             "pixel_size_source",
             "area_pixels", "area_um2", "equivalent_diameter_pixels", "equivalent_diameter_um",
             "perimeter_pixels", "perimeter_um", "circularity",
@@ -698,6 +775,7 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             f"Source: {plan['dataset']['source_url']} (license recorded as {plan['dataset']['license']}; terms remain the user's responsibility).",
             f"Manifest SHA-256: `{manifest_hash}`. Study-plan SHA-256: `{plan_hash}`.", "",
             f"Measured frames: {report['n_measured_frames']}; pending annotation: {report['n_pending_annotation_frames']}; missing: {report['n_missing_frames']}; failed: {report['n_failed_frames']}.",
+            f"Pending frames with a documented annotation disposition: {report['n_annotation_disposition_frames']}.",
             f"Specimens: {len(all_specimens)}; {split['grouping_unit']} groups — development: {len(development)}, frozen final test: {len(final_test)}.", "",
             f"Tracked object identities: {report['object_tracking']['n_tracked_object_trajectories']}; tracking status: {report['object_tracking']['status']}.",
             "## Interpretation boundaries", "", *[f"- {item}" for item in report["limitations"]], "",

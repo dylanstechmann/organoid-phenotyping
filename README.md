@@ -159,11 +159,18 @@ The auditor reveals the repeat mapping only after the explicit local audit
 command. It reports foreground Dice and annotator-ID independence for the
 completed repeat pairs. These are segmentation-agreement measures: they do
 not establish that a mask is correct or support a biological effect. If every
-primary task has a saved mask, the audit writes a new
+primary task has either a saved mask or an explicit disposition, the audit writes a new
 `acquisitions-annotated-*.csv` beside the source manifest. It preserves the
-original file and still marks each mask for further review. Run `measure` on
-that new manifest only after reviewing the saved masks; pending, missing or
-failed source rows remain visible.
+original file. A mask remains marked for review; a disposition remains
+`pending_annotation` and has no mask. Dispositions include no visible target,
+ambiguous boundary, occluded, cropped, and unusable image, each with a required
+rationale. Their revision files are hash-bound and kept separate from geometry.
+The audit emits current and superseded revisions in `dispositions.csv` and
+records disposition agreement separately from mask Dice. A later saved mask can
+replace the task's current disposition while preserving its earlier record. Run
+`measure` on the new manifest to verify the current disposition record hash;
+dispositioned, pending, missing, or failed source rows remain visible and are
+not measured.
 
 To attach the audit record to the sibling RegenWorkbench ResearchDesk card:
 
@@ -172,9 +179,9 @@ python tools/import_organoid_annotation_review.py `
   --audit ..\organoid-phenotyping\artifacts\bonn-kidney-cyst-induction\annotation-session-v1\audits\AUDIT_ID
 ```
 
-The adapter copies only the bounded audit report, repeat table and hash receipt.
-It never imports the private assignment key or masks, and keeps agreement review
-separate from the later image-measurement run.
+The adapter copies only the bounded audit report, repeat and disposition tables,
+and hash receipt. It never imports the private assignment key or masks, and
+keeps agreement review separate from the later image-measurement run.
 
 ## Input contract
 
@@ -191,6 +198,11 @@ separate from the later image-measurement run.
 | `image_path`, `mask_path` | Paths relative to the manifest directory. Measured rows require both. |
 | `status` | `measured`, `pending_annotation`, `missing`, or `failed`. |
 | `status_reason` | Required for pending, missing or failed frames; preserved in outputs. |
+
+Optional disposition fields (`annotation_disposition`, rationale, task ID,
+annotator ID, revision, relative record path and expected SHA-256) identify a
+hash-verified annotation-desk outcome. They are allowed only on a
+`pending_annotation` row and never count as a mask or measurement.
 
 Optional columns include `pixel_size_um` with required `pixel_size_source`, `culture_condition`, `treatment`, `technical_replicate`,
 `acquisition_date`, `passage`, `culture_day`, `magnification`, `source_uri`,
