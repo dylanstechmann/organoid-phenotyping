@@ -19,6 +19,7 @@ import numpy as np
 from PIL import Image
 
 from organoidphenotyping import __version__
+from organoidphenotyping.instance_agreement import group_agreement_summary, instance_agreement
 
 
 MANIFEST_COLUMNS = {
@@ -415,7 +416,7 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
     grouping_field = split["grouping_field"]
     specimen_metadata = {}
     seen_frame_ids = set()
-    frame_rows, comparison_rows = [], []
+    frame_rows, comparison_rows, agreement_rows = [], [], []
     object_rows = []
     overlay_rows = []
     acquisition_holdout_ids = set(split.get("acquisition_holdout_microscope_ids", []))
@@ -621,6 +622,30 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
                 union = int(np.count_nonzero(predicted | target))
                 predicted_area = int(np.count_nonzero(predicted))
                 target_area = int(np.count_nonzero(target))
+                agreement = instance_agreement(predicted_values, reference_values, pixel_size_um=pixel_size)
+                agreement_rows.append({
+                    "frame_id": frame_id, "specimen_id": specimen_id,
+                    "biological_unit_id": row["biological_unit_id"], "split": record["split"],
+                    "culture_condition": row["culture_condition"], "treatment": row["treatment"],
+                    "timepoint_h": timepoint,
+                    "reference_mask_annotator": row.get("reference_mask_annotator", UNKNOWN) or UNKNOWN,
+                    "mask_sha256": _sha256(mask_raw), "reference_mask_sha256": _sha256(reference_raw),
+                    "match_iou_threshold": agreement["match_iou_threshold"],
+                    "containment_fraction": agreement["containment_fraction"],
+                    "n_predicted_objects": agreement["n_predicted_objects"],
+                    "n_reference_objects": agreement["n_reference_objects"],
+                    "n_matched_objects": agreement["n_matched_objects"],
+                    "signed_count_error": agreement["signed_count_error"],
+                    "n_unmatched_predicted_objects": len(agreement["unmatched_predicted_labels"]),
+                    "n_unmatched_reference_objects": len(agreement["unmatched_reference_labels"]),
+                    "mean_matched_iou": agreement["mean_matched_iou"],
+                    "mean_matched_dice": agreement["mean_matched_dice"],
+                    "mean_absolute_matched_area_error_pixels": agreement["mean_absolute_matched_area_error_pixels"],
+                    "n_split_reference_objects": agreement["n_split_reference_objects"],
+                    "n_merged_predicted_objects": agreement["n_merged_predicted_objects"],
+                    "signed_foreground_area_error_pixels": agreement["signed_foreground_area_error_pixels"],
+                    "both_masks_empty": agreement["both_masks_empty"],
+                })
                 comparison_rows.append({
                     "frame_id": frame_id, "specimen_id": specimen_id,
                     "clone_id": row["clone_id"], "culture_batch_id": row["culture_batch_id"],
@@ -704,6 +729,8 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "n_tracked_object_trajectories": trajectory_count,
         },
         "split": split_report,
+        "instance_agreement": (group_agreement_summary(agreement_rows) if agreement_rows else
+                               {"n_frames": 0, "status": "no_reference_mask_supplied"}),
         "outputs": {},
         "limitations": [
             "Mask measurements describe the supplied segmentation; this package does not segment images or validate a mask as biologically correct.",
@@ -711,6 +738,7 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "Repeated images and microscope acquisitions in one declared specimen unit are nested observations, not independent biological units.",
             "Object areas are cross-sectional unless a reviewed object-to-track map explicitly links labels across acquisitions.",
             "Physical area is reported only when pixel_size_um is supplied with provenance; otherwise only pixel geometry is available.",
+            "Instance agreement compares a supplied mask with a supplied reference mask under a declared matching rule. It measures agreement between two annotations, not the correctness of either, and no agreement quantity is a biological outcome.",
         ],
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -752,6 +780,15 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "area_pixels", "area_um2", "equivalent_diameter_pixels", "equivalent_diameter_um",
             "perimeter_pixels", "perimeter_um", "circularity", "touches_image_edge", "foreground_fraction",
         ])
+        _write_csv(staged / "instance_agreement.csv", agreement_rows, [
+            "frame_id", "specimen_id", "biological_unit_id", "split", "culture_condition", "treatment",
+            "timepoint_h", "reference_mask_annotator", "mask_sha256", "reference_mask_sha256",
+            "match_iou_threshold", "containment_fraction", "n_predicted_objects", "n_reference_objects",
+            "n_matched_objects", "signed_count_error", "n_unmatched_predicted_objects",
+            "n_unmatched_reference_objects", "mean_matched_iou", "mean_matched_dice",
+            "mean_absolute_matched_area_error_pixels", "n_split_reference_objects",
+            "n_merged_predicted_objects", "signed_foreground_area_error_pixels", "both_masks_empty",
+        ])
         _write_csv(staged / "segmentation_comparison.csv", comparison_rows, [
             "frame_id", "specimen_id", "clone_id", "culture_batch_id", "imaging_lab", "microscope_id",
             "timepoint_h", "split", "mask_path", "reference_mask_path", "mask_sha256", "reference_mask_sha256",
@@ -764,7 +801,7 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             for frame_id, cached_overlay in overlay_rows:
                 shutil.copyfile(cached_overlay, overlay_directory / f"{frame_id}.png")
         for relative in ("measurements.csv", "cross_sectional_summary.csv", "tracked_object_growth.csv",
-                         "objects.csv", "segmentation_comparison.csv"):
+                         "objects.csv", "segmentation_comparison.csv", "instance_agreement.csv"):
             report["outputs"][relative] = _sha256((staged / relative).read_bytes())
         report["outputs"]["overlays"] = {
             frame_id: _sha256((overlay_directory / f"{frame_id}.png").read_bytes())
@@ -782,6 +819,18 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "## Missing and failed frames", "",
             "See `measurements.csv` and `cross_sectional_summary.csv`; pending annotations, missing frames and failures remain separate and are not interpolated.",
             "Longitudinal growth is written only for object identities in the supplied reviewed track map (`tracked_object_growth.csv`). Without such a map, the package makes no object trajectory claim.", "",
+            "## Instance-level agreement", "",
+            (f"Reference-compared frames: {report['instance_agreement']['n_frames']} across "
+             f"{report['instance_agreement']['n_groups']} {split['grouping_unit']} groups; frames with no matched object pair: "
+             f"{report['instance_agreement']['n_frames_without_matched_objects']}. "
+             f"Pooled frame mean matched IoU: {report['instance_agreement']['pooled_frame_mean_matched_iou']}; "
+             f"equal-group mean: {report['instance_agreement']['equal_group_mean_matched_iou']} over "
+             f"{report['instance_agreement']['n_groups_contributing_to_equal_group_mean']} contributing groups. "
+             f"Split reference objects: {report['instance_agreement']['total_split_reference_objects']}; "
+             f"merged predicted objects: {report['instance_agreement']['total_merged_predicted_objects']}. "
+             "No interval is reported; see `instance_agreement.csv` and the receipt for the matching rule and denominators."
+             if agreement_rows else
+             "No reference mask was supplied, so no object-level agreement was computed."), "",
             "This receipt reports image-mask geometry, not organoid health or regenerative function.", "",
         ]
         (staged / "REPORT.md").write_text("\n".join(report_lines), encoding="utf-8")

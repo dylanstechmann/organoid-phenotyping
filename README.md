@@ -81,8 +81,18 @@ measurement run records input hashes and writes:
 - `objects.csv`: one row per positive integer instance label in a supplied mask.
   A binary foreground value is one instance; disconnected components sharing
   that value are not split automatically.
-- `segmentation_comparison.csv`: IoU, Dice and physical-area error when a manual
-  reference mask is supplied.
+- `segmentation_comparison.csv`: frame-level foreground IoU, Dice and physical-area
+  error when a manual reference mask is supplied.
+- `instance_agreement.csv`: object-level agreement for the same reference pairs.
+  Objects are matched one-to-one by descending IoU at or above a declared
+  threshold (0.5), and the row records matched counts, the signed count error,
+  unmatched objects on each side, mean matched IoU/Dice, mean absolute matched
+  area error, and split/merge counts. Foreground Dice cannot see a split, a merge
+  or a count error at equal total area; these columns can. The receipt adds a
+  per-source-group summary with both the pooled frame mean and an equal-group
+  mean, their denominators, and no interval: a frame or object bootstrap would not
+  be donor uncertainty. Agreement between two masks does not establish that
+  either is correct.
 - `overlays/`: original field with the supplied mask tinted for human review.
 - `receipt.json` and `REPORT.md`: dataset terms, frozen split identities,
   output hashes and interpretation limits.
@@ -228,7 +238,9 @@ on new organoids.
 
 ## Interpretation boundary
 
-Pixel geometry is always reported for a supplied mask. Frame-level area is the
+Pixel geometry is always reported for a supplied mask. Instance matching uses one
+declared rule, published with every result; a different threshold or containment
+fraction gives different counts, so the rule travels with the numbers. Frame-level area is the
 union of positive labels; `objects.csv` reports each positive integer label as
 one object, even if that label has disconnected components. Physical units
 appear only when a positive pixel size is provided with provenance;

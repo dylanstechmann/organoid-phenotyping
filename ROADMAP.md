@@ -96,12 +96,24 @@ analysis or evidence of a biological treatment effect.
 
 ## O4 — Evaluate agreement at the correct level
 
-- Retain foreground Dice; add instance matching, count/area error, split/merge
-  rates and matched-object overlap with declared matching rules.
-- Report by source group with equal-group summaries. Donor/well/image/object
-  denominators differ; adjacent frames are not independent donors.
+**Instance-level agreement is implemented.** `instance_agreement.csv` reports
+one-to-one matching by descending IoU at a declared threshold, matched counts,
+signed count error, unmatched objects on each side, mean matched IoU/Dice, mean
+absolute matched area error, and split/merge counts under a separate declared
+containment rule. Frame-level foreground Dice is retained unchanged. The receipt
+carries a per-source-group summary with both the pooled frame mean and an
+equal-group mean, specimen and frame denominators per group, and an explicit
+`uncertainty: not_reported`. Frames where no pair reached the threshold are
+counted separately rather than scored as zero or as perfect, and empty masks are
+reported as empty rather than as perfect agreement. Tests cover identical,
+split, merged, below-threshold, missed/extra, unscored and malformed cases, plus
+an end-to-end run where the pooled and equal-group means differ.
+
+- Remaining: panoptic-style summary quality, per-object matched-boundary error,
+  and agreement computed across more than two annotators at once.
 - Add uncertainty only when independent-group counts and assumptions support
-  it. A frame/object bootstrap is not donor uncertainty.
+  it. A frame/object bootstrap is not donor uncertainty. **Still not reported;
+  the current cohorts have too few independent groups.**
 - Keep repeatability, reference agreement and geometry separate from viability,
   maturation, treatment response and regenerative potency.
 
