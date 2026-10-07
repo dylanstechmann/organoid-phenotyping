@@ -163,4 +163,4 @@ O1/O5 correctness → O2 review lifecycle → O3 development case → O4 grouped
 agreement → O6 publication/integration. Packaging/source-access checks can
 proceed while awaiting human review. Synthetic audits cannot substitute for
 accepted real masks. The [RegenWorkbench roadmap](https://github.com/dylanstechmann/regen-workbench/blob/main/ROADMAP.md)
-tracks integration and the broader portfolio.
+tracks integration across the related projects.

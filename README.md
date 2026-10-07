@@ -1,5 +1,8 @@
 # Organoid Phenotyping
 
+This is a personal hobby and learning project, developed with substantial
+assistance from AI coding tools.
+
 Organoid Phenotyping turns source-linked microscopy acquisitions and supplied
 instance masks into image- and object-level morphology tables, cross-sectional
 summaries, optional tracked-object trajectories, reference-mask comparisons,
