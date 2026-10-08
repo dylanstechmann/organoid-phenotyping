@@ -72,6 +72,19 @@ empty/excluded tasks stay counted.
 - Export accepted masks/dispositions for benchmarks; preserve unresolved and
   rejected versions for audits without using them as ground truth.
 
+**Implemented 2026-10-08 (`mask_review.py`, `organoid-phenotyping review-ledger`):** an
+append-only, hash-chained ledger. A submission freezes one revision (mask hash, source-image
+hash, annotator, session, protocol version, rationale); an edit is a new revision with a
+different hash. Reviews need a reviewer and session different from the annotation; a revision is
+`accepted` at the ledger's required count of accepting reviews, `rejected` on a rejection with no
+acceptance, and a mix is a `disagreement` that only an uninvolved adjudicator resolves. Only the
+latest revision counts, and `export-accepted` returns accepted masks whose bytes still match their
+frozen hash and lists everything else, with the reason, as excluded (never ground truth).
+Identities and clocks are self-reported, so none of this shows independent review.
+- Remaining: wire the annotation desk to submit into the ledger; round and permission separation
+  across sessions; blinded-until-frozen unblinding gates; `measure` reading the export instead of
+  the manifest's mask paths; a reviewed-geometry flag in the measurement outputs.
+
 **Acceptance:** benchmark inputs resolve to accepted frozen revisions; later
 edits cannot overwrite review; human review remains distinct from verified bytes.
 

@@ -196,6 +196,17 @@ The adapter copies only the bounded audit report, repeat and disposition tables,
 and hash receipt. It never imports the private assignment key or masks, and
 keeps agreement review separate from the later image-measurement run.
 
+## Mask review ledger
+
+`organoid-phenotyping review-ledger` keeps an append-only, hash-chained record of frozen mask
+revisions and their reviews, so downstream work can be given only masks whose latest revision
+was accepted and whose bytes still match (`open`, `submit`, `review`, `adjudicate`, `summary`,
+`export-accepted`). It does not draw or edit masks. Annotator and reviewer identifiers, sessions
+and times are typed in by the people involved and are not authenticated, so a ledger shows the
+order and rules of a review, not that reviewers were independent. "Accepted" means reviewed under
+those rules; it is not a statement that a mask is correct or that any biology follows from it.
+Rules and limits are in `src/organoidphenotyping/mask_review.py`; the plan is ROADMAP O2.
+
 ## Input contract
 
 `acquisitions.csv` is UTF-8 CSV with one acquisition per row. Required columns:
