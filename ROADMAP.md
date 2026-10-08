@@ -16,8 +16,9 @@ and [associated study](https://doi.org/10.1186/s12860-026-00591-x). Source image
 have no supplied instance masks. Original well identities, selected ROIs,
 pixel calibration and object tracks must not be invented from filenames.
 The pilot/audit is not a completed independent review or measured biological
-treatment result. No GitHub remote is configured at this review date;
-publication is a separate outstanding task.
+treatment result. The GitHub remote (dylanstechmann/organoid-phenotyping) exists as of
+2026-10-08; CI is not yet configured (a workflow patch is pending the
+`workflow` token scope).
 
 ## O1 — Make annotation task state reliable
 
@@ -141,7 +142,7 @@ disposition.
 
 ## O6 — Publish and integrate a reproducible methods package
 
-- Configure the intended GitHub repository, CI and a synthetic example that
+- Configure CI (the repository exists) and a synthetic example that
   runs from a fresh wheel install with CLI smoke checks.
 - Document exact licensed downloads/hashes; keep large third-party archives
   and private annotations out of Git.
