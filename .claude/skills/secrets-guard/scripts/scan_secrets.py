@@ -64,13 +64,14 @@ def scan_text(name, text):
         else:
             m = ASSIGN.match(line)
             if m and m.group(1) not in ("PATH", "PYTHONPATH", "LD_LIBRARY_PATH"):
-                val = m.group(2)
+                name_, val = m.group(1), m.group(2)
+                checksumish = re.search(r"(SHA|HASH|CHECKSUM|DIGEST|CRC|FINGERPRINT)", name_)
                 looks_like_code = any(c in val for c in "()[]{}<>")
-                if (not looks_like_code and not is_dummy(val)
+                if (not looks_like_code and not checksumish and not is_dummy(val)
                         and entropy(val) > 3.6
                         and not val.startswith(("http", "$", "/"))):
                     hits.append((name, i, "high-entropy assignment",
-                                 "%s=%s" % (m.group(1), trunc(val))))
+                                 "%s=%s" % (name_, trunc(val))))
     return hits
 
 
