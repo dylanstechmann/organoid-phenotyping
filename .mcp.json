@@ -13,6 +13,27 @@
         ".agent-tools/mcp/launch.sh",
         "web_mcp.py"
       ]
+    },
+    "github": {
+      "command": "sh",
+      "args": [
+        ".agent-tools/mcp/gh_mcp.sh"
+      ],
+      "env": {}
+    },
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ]
     }
   }
 }
