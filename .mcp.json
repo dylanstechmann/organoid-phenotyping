@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "scholar": {
+      "command": "sh",
+      "args": [
+        ".agent-tools/mcp/launch.sh",
+        "scholar_mcp.py"
+      ]
+    },
+    "web": {
+      "command": "sh",
+      "args": [
+        ".agent-tools/mcp/launch.sh",
+        "web_mcp.py"
+      ]
+    }
+  }
+}

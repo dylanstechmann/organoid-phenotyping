@@ -12,3 +12,8 @@ artifacts/
 
 
 *.egg-info/
+
+# local env files hold keys (names in .env.example)
+.env
+.env.*
+!.env.example
