@@ -11,6 +11,7 @@ from organoidphenotyping.annotation_pilot import prepare_annotation_pilot
 from organoidphenotyping.annotation_workbench import audit_annotations, create_session, serve_annotation_session, _load_session
 from organoidphenotyping import mask_review
 from organoidphenotyping.core import StudyError, measure_study
+from organoidphenotyping.development_packet import prepare_development_packet, validate_development_packet
 
 
 def _run_ledger(args):
@@ -45,6 +46,16 @@ def main(argv=None) -> int:
     measure.add_argument("--out", required=True, help="new output directory")
     measure.add_argument("--tracks", default=None,
                          help="optional reviewed CSV mapping frame_id, instance_label_value and track_id; path is relative to manifest directory")
+    development = sub.add_parser("prepare-development-packet", help="build a deterministic development-only review packet from a pinned intake")
+    development.add_argument("--manifest", required=True, help="exact acquisition CSV")
+    development.add_argument("--plan", required=True, help="exact frozen source-study plan")
+    development.add_argument("--intake-receipt", required=True, help="v2 intake receipt.json beside measurements.csv")
+    development.add_argument("--out", required=True, help="new packet directory; text metadata only")
+    validate_development = sub.add_parser("validate-development-packet", help="require exact regeneration of a development-only packet")
+    validate_development.add_argument("--packet", required=True, help="packet directory to validate")
+    validate_development.add_argument("--manifest", required=True, help="exact acquisition CSV")
+    validate_development.add_argument("--plan", required=True, help="exact frozen source-study plan")
+    validate_development.add_argument("--intake-receipt", required=True, help="v2 intake receipt.json beside measurements.csv")
     import_bonn = sub.add_parser("import-bonn-kidney", help="verify and index the licensed Bonn Figure 4 cyst-induction archive")
     import_bonn.add_argument("--archive", required=True, help="downloaded Bonn Figure 4 ZIP file")
     import_bonn.add_argument("--out", required=True, help="new study directory for extracted source images and manifests")
@@ -108,6 +119,10 @@ def main(argv=None) -> int:
             result = _run_ledger(args)
         elif args.command == "measure":
             result = measure_study(args.manifest, args.plan, args.out, args.tracks)
+        elif args.command == "prepare-development-packet":
+            result = prepare_development_packet(args.manifest, args.plan, args.intake_receipt, args.out)
+        elif args.command == "validate-development-packet":
+            result = validate_development_packet(args.packet, args.manifest, args.plan, args.intake_receipt)
         elif args.command == "import-bonn-kidney":
             result = import_bonn_figure4(args.archive, args.out, retrieved_on=args.retrieved_on)
         elif args.command == "prepare-annotation-pilot":

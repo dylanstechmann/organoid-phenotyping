@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import sys
 import tempfile
@@ -135,6 +136,15 @@ class PhenotypingTests(unittest.TestCase):
             report = measure_study(root / "acquisitions.csv", root / "study-plan.json",
                                    root / "tracked-output", "tracks.csv")
             self.assertEqual(report["n_pending_annotation_frames"], 1)
+            overlap = report["split"]["exact_image_overlap"]
+            self.assertEqual((overlap["checked_frames"], overlap["frames_without_image"]), (3, 0))
+            self.assertEqual(len(overlap["shared_files"]), 1)
+            shared = overlap["shared_files"][0]
+            self.assertEqual(shared["development_frames"], ["frame_a0", "frame_a12"])
+            self.assertEqual(shared["final_test_frames"], ["frame_b0"])
+            self.assertEqual(report["split"]["specimen_overlap"], [])
+            self.assertEqual(shared["sha256"], hashlib.sha256(
+                (root / "images/frame_b0.png").read_bytes()).hexdigest())
             self.assertEqual(report["object_tracking"]["status"], "reviewed_track_map_supplied")
             self.assertEqual(report["object_tracking"]["n_tracked_object_trajectories"], 1)
             with (root / "tracked-output" / "tracked_object_growth.csv").open(encoding="utf-8", newline="") as handle:
@@ -148,8 +158,11 @@ class PhenotypingTests(unittest.TestCase):
             self.assertEqual(len(summary), 2)
             self.assertNotIn("growth_percent_since_prior_tracked_timepoint", summary[0])
 
+            # Two identical files within development alone do not overlap the split.
+            Image.new("RGB", (4, 4), "black").save(root / "images/frame_b0.png")
             untracked = measure_study(root / "acquisitions.csv", root / "study-plan.json",
                                       root / "untracked-output")
+            self.assertEqual(untracked["split"]["exact_image_overlap"]["shared_files"], [])
             self.assertEqual(untracked["object_tracking"]["status"], "no_track_map")
             self.assertEqual(untracked["object_tracking"]["n_tracked_object_trajectories"], 0)
             with (root / "untracked-output" / "tracked_object_growth.csv").open(encoding="utf-8", newline="") as handle:

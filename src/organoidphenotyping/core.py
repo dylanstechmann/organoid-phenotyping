@@ -680,6 +680,11 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
     final_test_specimens = {row["specimen_id"] for row in frame_rows if row["split"] == "final_test"}
     heldout_microscope_specimens = {row["specimen_id"] for row in frame_rows
                                     if row["microscope_id"] in acquisition_holdout_ids}
+    image_frames = {"development": defaultdict(list), "final_test": defaultdict(list)}
+    for row in frame_rows:
+        if row["image_sha256"]:
+            image_frames[row["split"]][row["image_sha256"]].append(row["frame_id"])
+    shared_images = image_frames["development"].keys() & image_frames["final_test"].keys()
     split_report = {
         "grouping_field": grouping_field,
         "grouping_unit": split["grouping_unit"],
@@ -688,6 +693,15 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
         "development_specimen_count": len(development_specimens),
         "final_test_specimen_count": len(final_test_specimens),
         "specimen_overlap": sorted(development_specimens & final_test_specimens),
+        "exact_image_overlap": {
+            "checked_frames": sum(bool(row["image_sha256"]) for row in frame_rows),
+            "frames_without_image": sum(not row["image_sha256"] for row in frame_rows),
+            "shared_files": [
+                {"sha256": digest, "development_frames": sorted(image_frames["development"][digest]),
+                 "final_test_frames": sorted(image_frames["final_test"][digest])}
+                for digest in sorted(shared_images)
+            ],
+        },
         "microscope_holdout_ids": sorted(acquisition_holdout_ids),
         "microscope_holdout_shared_specimens_with_development": sorted(heldout_microscope_specimens & development_specimens),
         "microscope_holdout_shared_specimens_with_final_test": sorted(heldout_microscope_specimens & final_test_specimens),

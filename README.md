@@ -207,6 +207,38 @@ order and rules of a review, not that reviewers were independent. "Accepted" mea
 those rules; it is not a statement that a mask is correct or that any biology follows from it.
 Rules and limits are in `src/organoidphenotyping/mask_review.py`; the plan is ROADMAP O2.
 
+## Development-only review packet
+
+`prepare-development-packet` binds the acquisition manifest, frozen study plan and v2 intake
+receipt into one deterministic text-only review packet. It reuses the source SHA-256 values in
+the receipt-bound `measurements.csv`; it does not open any source image, including held-out
+images. The held-out biological unit's frame IDs, paths and hashes are omitted. Only the count
+of held-out groups appears in the receipt.
+
+```bash
+organoid-phenotyping prepare-development-packet \
+  --manifest artifacts/bonn-kidney-cyst-induction/acquisitions.csv \
+  --plan artifacts/bonn-kidney-cyst-induction/study-plan.json \
+  --intake-receipt artifacts/bonn-kidney-cyst-desk-intake-v2/receipt.json \
+  --out artifacts/bonn-kidney-development-review-packet-v1
+organoid-phenotyping validate-development-packet \
+  --packet artifacts/bonn-kidney-development-review-packet-v1 \
+  --manifest artifacts/bonn-kidney-cyst-induction/acquisitions.csv \
+  --plan artifacts/bonn-kidney-cyst-induction/study-plan.json \
+  --intake-receipt artifacts/bonn-kidney-cyst-desk-intake-v2/receipt.json
+```
+
+`review_packet.csv` contains only development acquisitions, with source image hash, mask
+revision, reviewer disposition and scale availability for every row. In the current Bonn
+packet, every mask revision is `missing`, every reviewer disposition is `pending_review`, and
+scale is `missing`; these states do not represent completed annotation or human review.
+`receipt.json` preserves the dataset credit and recorded CC-BY-4.0 reuse terms and records the
+280-frame/five-unit grouping check and zero exact cross-split image-hash overlap. Validation
+requires byte-for-byte regeneration of all three text files and rejects extra assets, grouping
+or exact-image overlap, incomplete provenance, and incomplete reviewer-disposition records.
+The packet supports future supplied-mask morphology measurement only; it is not segmentation,
+viability, maturation, function, or potency evidence.
+
 ## Input contract
 
 `acquisitions.csv` is UTF-8 CSV with one acquisition per row. Required columns:
@@ -249,6 +281,13 @@ manifest field, preventing repeated specimens from crossing the group split. Opt
 `acquisition_holdout_microscope_ids` measure acquisition transfer. If those
 images share organoid IDs with development, they do **not** measure performance
 on new organoids.
+
+The receipt's `split.exact_image_overlap` identifies identical source image files
+assigned to both development and final test, even under different specimen IDs
+or filenames. Each shared SHA-256 lists frame IDs on both sides. The check
+includes pending or failed frames that supply an image and gives the count
+without an image. Re-encoded, resized or cropped copies can have different
+file hashes.
 
 ## Interpretation boundary
 
