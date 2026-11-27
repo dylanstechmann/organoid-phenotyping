@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import sys
 import tempfile
@@ -135,6 +136,22 @@ class PhenotypingTests(unittest.TestCase):
             report = measure_study(root / "acquisitions.csv", root / "study-plan.json",
                                    root / "tracked-output", "tracks.csv")
             self.assertEqual(report["n_pending_annotation_frames"], 1)
+            overlap = report["split"]["exact_image_overlap"]
+            self.assertEqual((overlap["checked_frames"], overlap["frames_without_image"]), (3, 0))
+            self.assertEqual(overlap["coverage_by_split"], {
+                "development": {"checked": 2, "without_image": 0},
+                "final_test": {"checked": 1, "without_image": 0},
+            })
+            self.assertTrue(overlap["comparison_possible"])
+            self.assertEqual(overlap["coverage_status"], "complete")
+            self.assertIn("shared across splits by SHA-256: 1", (root / "tracked-output/REPORT.md").read_text())
+            self.assertEqual(len(overlap["shared_files"]), 1)
+            shared = overlap["shared_files"][0]
+            self.assertEqual(shared["development_frames"], ["frame_a0", "frame_a12"])
+            self.assertEqual(shared["final_test_frames"], ["frame_b0"])
+            self.assertEqual(report["split"]["specimen_overlap"], [])
+            self.assertEqual(shared["sha256"], hashlib.sha256(
+                (root / "images/frame_b0.png").read_bytes()).hexdigest())
             self.assertEqual(report["object_tracking"]["status"], "reviewed_track_map_supplied")
             self.assertEqual(report["object_tracking"]["n_tracked_object_trajectories"], 1)
             with (root / "tracked-output" / "tracked_object_growth.csv").open(encoding="utf-8", newline="") as handle:
@@ -148,12 +165,39 @@ class PhenotypingTests(unittest.TestCase):
             self.assertEqual(len(summary), 2)
             self.assertNotIn("growth_percent_since_prior_tracked_timepoint", summary[0])
 
+            # Two identical files within development alone do not overlap the split.
+            Image.new("RGB", (4, 4), "black").save(root / "images/frame_b0.png")
             untracked = measure_study(root / "acquisitions.csv", root / "study-plan.json",
                                       root / "untracked-output")
+            self.assertEqual(untracked["split"]["exact_image_overlap"]["shared_files"], [])
             self.assertEqual(untracked["object_tracking"]["status"], "no_track_map")
             self.assertEqual(untracked["object_tracking"]["n_tracked_object_trajectories"], 0)
             with (root / "untracked-output" / "tracked_object_growth.csv").open(encoding="utf-8", newline="") as handle:
                 self.assertEqual(list(csv.DictReader(handle)), [])
+
+            pending_frame = dict(rows[-1])
+            rows[-1].update(status="missing", image_path="", status_reason="No image supplied.")
+            with (root / "incomplete.csv").open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
+            incomplete = measure_study(root / "incomplete.csv", root / "study-plan.json", root / "incomplete")
+            check = incomplete["split"]["exact_image_overlap"]
+            self.assertFalse(check["comparison_possible"])
+            self.assertEqual(check["coverage_status"], "unavailable")
+            self.assertEqual(check["coverage_by_split"]["final_test"], {"checked": 0, "without_image": 1})
+            self.assertIn("requires at least one supplied image in each split",
+                          (root / "incomplete/REPORT.md").read_text())
+
+            with (root / "incomplete.csv").open("a", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+                writer.writerow(dict(pending_frame, frame_id="frame_b12", timepoint_h=12))
+            partial = measure_study(root / "incomplete.csv", root / "study-plan.json", root / "partial")
+            check = partial["split"]["exact_image_overlap"]
+            self.assertTrue(check["comparison_possible"])
+            self.assertEqual(check["coverage_status"], "partial")
+            self.assertEqual(check["shared_files"], [])
+            self.assertIn("Coverage is partial", (root / "partial/REPORT.md").read_text())
 
     def test_track_map_rejects_a_label_that_does_not_exist(self):
         with self.assertRaisesRegex(StudyError, "track map references no measured instance"):

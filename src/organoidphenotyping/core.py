@@ -680,6 +680,21 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
     final_test_specimens = {row["specimen_id"] for row in frame_rows if row["split"] == "final_test"}
     heldout_microscope_specimens = {row["specimen_id"] for row in frame_rows
                                     if row["microscope_id"] in acquisition_holdout_ids}
+    image_frames = {"development": defaultdict(list), "final_test": defaultdict(list)}
+    coverage = {role: {"checked": 0, "without_image": 0} for role in image_frames}
+    for row in frame_rows:
+        role = row["split"]
+        if row["image_sha256"]:
+            image_frames[role][row["image_sha256"]].append(row["frame_id"])
+            coverage[role]["checked"] += 1
+        else:
+            coverage[role]["without_image"] += 1
+    shared_images = image_frames["development"].keys() & image_frames["final_test"].keys()
+    coverage_status = "complete"
+    if any(counts["checked"] == 0 for counts in coverage.values()):
+        coverage_status = "unavailable"
+    elif any(counts["without_image"] for counts in coverage.values()):
+        coverage_status = "partial"
     split_report = {
         "grouping_field": grouping_field,
         "grouping_unit": split["grouping_unit"],
@@ -688,6 +703,18 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
         "development_specimen_count": len(development_specimens),
         "final_test_specimen_count": len(final_test_specimens),
         "specimen_overlap": sorted(development_specimens & final_test_specimens),
+        "exact_image_overlap": {
+            "checked_frames": sum(counts["checked"] for counts in coverage.values()),
+            "frames_without_image": sum(counts["without_image"] for counts in coverage.values()),
+            "coverage_by_split": coverage,
+            "comparison_possible": coverage_status != "unavailable",
+            "coverage_status": coverage_status,
+            "shared_files": [
+                {"sha256": digest, "development_frames": sorted(image_frames["development"][digest]),
+                 "final_test_frames": sorted(image_frames["final_test"][digest])}
+                for digest in sorted(shared_images)
+            ],
+        },
         "microscope_holdout_ids": sorted(acquisition_holdout_ids),
         "microscope_holdout_shared_specimens_with_development": sorted(heldout_microscope_specimens & development_specimens),
         "microscope_holdout_shared_specimens_with_final_test": sorted(heldout_microscope_specimens & final_test_specimens),
@@ -814,6 +841,15 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             f"Measured frames: {report['n_measured_frames']}; pending annotation: {report['n_pending_annotation_frames']}; missing: {report['n_missing_frames']}; failed: {report['n_failed_frames']}.",
             f"Pending frames with a documented annotation disposition: {report['n_annotation_disposition_frames']}.",
             f"Specimens: {len(all_specimens)}; {split['grouping_unit']} groups — development: {len(development)}, frozen final test: {len(final_test)}.", "",
+            "## Source image overlap", "",
+            f"Checked {coverage['development']['checked']} development and {coverage['final_test']['checked']} final-test images. "
+            f"Frames without supplied images numbered {coverage['development']['without_image']} in development "
+            f"and {coverage['final_test']['without_image']} in final test.",
+            (f"Distinct image files shared across splits by SHA-256: {len(shared_images)}."
+             if split_report["exact_image_overlap"]["comparison_possible"] else
+             "A cross-split comparison requires at least one supplied image in each split."),
+            *(["Coverage is partial. Only frames with supplied images contributed to the comparison."]
+              if coverage_status == "partial" else []), "",
             f"Tracked object identities: {report['object_tracking']['n_tracked_object_trajectories']}; tracking status: {report['object_tracking']['status']}.",
             "## Interpretation boundaries", "", *[f"- {item}" for item in report["limitations"]], "",
             "## Missing and failed frames", "",
