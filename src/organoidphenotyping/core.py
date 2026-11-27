@@ -690,6 +690,11 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
         else:
             coverage[role]["without_image"] += 1
     shared_images = image_frames["development"].keys() & image_frames["final_test"].keys()
+    coverage_status = "complete"
+    if any(counts["checked"] == 0 for counts in coverage.values()):
+        coverage_status = "unavailable"
+    elif any(counts["without_image"] for counts in coverage.values()):
+        coverage_status = "partial"
     split_report = {
         "grouping_field": grouping_field,
         "grouping_unit": split["grouping_unit"],
@@ -702,7 +707,8 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             "checked_frames": sum(counts["checked"] for counts in coverage.values()),
             "frames_without_image": sum(counts["without_image"] for counts in coverage.values()),
             "coverage_by_split": coverage,
-            "comparison_possible": all(counts["checked"] > 0 for counts in coverage.values()),
+            "comparison_possible": coverage_status != "unavailable",
+            "coverage_status": coverage_status,
             "shared_files": [
                 {"sha256": digest, "development_frames": sorted(image_frames["development"][digest]),
                  "final_test_frames": sorted(image_frames["final_test"][digest])}
@@ -841,7 +847,9 @@ def _measure_study_impl(manifest_path: str | Path, plan_path: str | Path, output
             f"and {coverage['final_test']['without_image']} in final test.",
             (f"Distinct image files shared across splits by SHA-256: {len(shared_images)}."
              if split_report["exact_image_overlap"]["comparison_possible"] else
-             "A cross-split comparison requires at least one supplied image in each split."), "",
+             "A cross-split comparison requires at least one supplied image in each split."),
+            *(["Coverage is partial. Only frames with supplied images contributed to the comparison."]
+              if coverage_status == "partial" else []), "",
             f"Tracked object identities: {report['object_tracking']['n_tracked_object_trajectories']}; tracking status: {report['object_tracking']['status']}.",
             "## Interpretation boundaries", "", *[f"- {item}" for item in report["limitations"]], "",
             "## Missing and failed frames", "",

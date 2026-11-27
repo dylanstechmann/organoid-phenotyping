@@ -143,6 +143,7 @@ class PhenotypingTests(unittest.TestCase):
                 "final_test": {"checked": 1, "without_image": 0},
             })
             self.assertTrue(overlap["comparison_possible"])
+            self.assertEqual(overlap["coverage_status"], "complete")
             self.assertIn("shared across splits by SHA-256: 1", (root / "tracked-output/REPORT.md").read_text())
             self.assertEqual(len(overlap["shared_files"]), 1)
             shared = overlap["shared_files"][0]
@@ -174,6 +175,7 @@ class PhenotypingTests(unittest.TestCase):
             with (root / "untracked-output" / "tracked_object_growth.csv").open(encoding="utf-8", newline="") as handle:
                 self.assertEqual(list(csv.DictReader(handle)), [])
 
+            pending_frame = dict(rows[-1])
             rows[-1].update(status="missing", image_path="", status_reason="No image supplied.")
             with (root / "incomplete.csv").open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
@@ -182,9 +184,20 @@ class PhenotypingTests(unittest.TestCase):
             incomplete = measure_study(root / "incomplete.csv", root / "study-plan.json", root / "incomplete")
             check = incomplete["split"]["exact_image_overlap"]
             self.assertFalse(check["comparison_possible"])
+            self.assertEqual(check["coverage_status"], "unavailable")
             self.assertEqual(check["coverage_by_split"]["final_test"], {"checked": 0, "without_image": 1})
             self.assertIn("requires at least one supplied image in each split",
                           (root / "incomplete/REPORT.md").read_text())
+
+            with (root / "incomplete.csv").open("a", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=rows[0].keys())
+                writer.writerow(dict(pending_frame, frame_id="frame_b12", timepoint_h=12))
+            partial = measure_study(root / "incomplete.csv", root / "study-plan.json", root / "partial")
+            check = partial["split"]["exact_image_overlap"]
+            self.assertTrue(check["comparison_possible"])
+            self.assertEqual(check["coverage_status"], "partial")
+            self.assertEqual(check["shared_files"], [])
+            self.assertIn("Coverage is partial", (root / "partial/REPORT.md").read_text())
 
     def test_track_map_rejects_a_label_that_does_not_exist(self):
         with self.assertRaisesRegex(StudyError, "track map references no measured instance"):

@@ -254,8 +254,10 @@ The receipt's `split.exact_image_overlap` identifies identical source image file
 assigned to both development and final test, even under different specimen IDs
 or filenames. Each shared SHA-256 lists frame IDs on both sides. The check
 includes pending or failed frames that supply an image and gives the count
-without an image for each split. The Markdown report gives the same coverage
-and flags a comparison as unavailable when either split has no supplied image.
+without an image for each split. The `coverage_status` is `complete` when every
+frame supplies an image, `partial` when both splits supply images but some frames
+are missing them, or `unavailable` when either split has no image. The Markdown
+report identifies partial or unavailable coverage alongside the frame counts.
 Re-encoded, resized or cropped copies can have different
 file hashes.
 
